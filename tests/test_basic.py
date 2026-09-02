@@ -36,11 +36,11 @@ class TestAppConfig:
         config = AppConfig()
         assert "douyin.com" in config.current_url
 
-    def test_default_geometry_size(self):
+    def test_default_geometry_is_invalid(self):
+        """没有保存配置时返回无效矩形（触发动态计算默认大小）"""
         config = AppConfig()
         geom = config.window_geometry
-        assert geom.width() == DEFAULT_WIDTH
-        assert geom.height() == DEFAULT_HEIGHT
+        assert not geom.isValid()
 
     def test_always_on_top_is_bool(self):
         config = AppConfig()

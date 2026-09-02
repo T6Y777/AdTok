@@ -8,7 +8,7 @@ ORG_NAME = "AdTok"
 APP_NAME = "AdTokPopup"
 
 # 配置版本：窗口大小逻辑变更时递增，旧版本自动重置窗口几何
-CONFIG_VERSION = 2
+CONFIG_VERSION = 3
 
 # ===== 默认配置 =====
 # 窗口比例保持 16:10（原 1280x800 的比例）
@@ -43,10 +43,11 @@ class AppConfig:
     # ---- 窗口几何 ----
     @property
     def window_geometry(self) -> QRect:
+        """返回保存的窗口位置大小；没有保存时返回无效矩形（触发默认计算）"""
         saved = self.settings.value("window_geometry")
         if isinstance(saved, QRect) and saved.isValid():
             return saved
-        return QRect(0, 0, DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        return QRect()  # 无效矩形，表示无保存配置
 
     @window_geometry.setter
     def window_geometry(self, rect: QRect):
