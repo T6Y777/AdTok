@@ -8,11 +8,17 @@ ORG_NAME = "AdTok"
 APP_NAME = "AdTokPopup"
 
 # ===== 默认配置 =====
-DEFAULT_WIDTH = 1280
-DEFAULT_HEIGHT = 800
+# 窗口比例保持 16:10（原 1280x800 的比例）
+WINDOW_ASPECT_RATIO = 1280 / 800  # = 1.6
+# 窗口面积占屏幕可用面积的比例（1/9 即长宽各约 1/3）
+WINDOW_AREA_RATIO = 1 / 9
 DEFAULT_MARGIN = 10          # 距屏幕边缘像素
 DEFAULT_URL = "https://www.douyin.com"
 DEFAULT_ALWAYS_ON_TOP = True
+
+# fallback 默认尺寸（配置无效时使用，实际默认大小由屏幕动态计算）
+DEFAULT_WIDTH = 1280
+DEFAULT_HEIGHT = 800
 
 # ===== 全局热键配置 =====
 HOTKEY_ID = 1

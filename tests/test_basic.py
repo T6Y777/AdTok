@@ -15,7 +15,7 @@ from PySide6.QtCore import QRect
 
 from config import (
     AppConfig, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_URL,
-    HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK,
+    HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK, WINDOW_ASPECT_RATIO,
 )
 
 
@@ -108,10 +108,11 @@ class TestPopupWindow:
         window = PopupWindow(config)
 
         # 基本属性验证
-        assert window.minimumWidth() == 1000
-        assert window.minimumHeight() == 600
-        assert window.width() == DEFAULT_WIDTH
-        assert window.height() == DEFAULT_HEIGHT
+        assert window.minimumWidth() == 480
+        assert window.minimumHeight() == 300
+        # 默认大小由屏幕动态计算，保持 16:10 比例（误差 <= 1px）
+        ratio = window.width() / window.height()
+        assert abs(ratio - WINDOW_ASPECT_RATIO) < 0.02
 
         # 标题栏存在
         assert window.title_bar is not None

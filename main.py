@@ -57,7 +57,7 @@ def main():
     window.show()
 
     # 系统托盘
-    create_tray(app, window)
+    tray = create_tray(app, window)
 
     # 全局热键（老板键）
     hotkey = HotkeyManager()

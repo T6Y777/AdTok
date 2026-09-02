@@ -3,7 +3,10 @@
 - 无边框、右下角定位、自定义标题栏
 - 内嵌 QWebEngineView 加载抖音/B站网页版
 - 标题栏可拖拽移动
+- 默认大小为屏幕可用面积的 1/9，保持 16:10 比例
 """
+import math
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
 )
@@ -14,6 +17,7 @@ from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
 
 from config import (
     AppConfig, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_MARGIN,
+    WINDOW_ASPECT_RATIO, WINDOW_AREA_RATIO,
 )
 
 
@@ -113,7 +117,7 @@ class PopupWindow(QWidget):
         self.setWindowFlags(flags)
 
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setMinimumSize(1000, 600)
+        self.setMinimumSize(480, 300)
         self.resize(DEFAULT_WIDTH, DEFAULT_HEIGHT)
 
         # 最外层布局
@@ -168,7 +172,7 @@ class PopupWindow(QWidget):
         self.web_container.layout().addWidget(self.web_view)
 
     def _position_window(self):
-        """定位窗口：有保存位置且尺寸合法就用，否则放屏幕右下角"""
+        """定位窗口：有保存位置且尺寸合法就用，否则动态计算并放右下角"""
         saved = self.config.window_geometry
         if (
             saved.isValid()
@@ -180,10 +184,15 @@ class PopupWindow(QWidget):
             self.setGeometry(saved)
             return
 
-        # 默认右下角
+        # 动态计算：面积为屏幕可用区域的 1/9，保持 16:10 比例
         screen = self.screen().availableGeometry()
-        x = screen.right() - DEFAULT_WIDTH - DEFAULT_MARGIN
-        y = screen.bottom() - DEFAULT_HEIGHT - DEFAULT_MARGIN
+        target_area = screen.width() * screen.height() * WINDOW_AREA_RATIO
+        height = int(math.sqrt(target_area / WINDOW_ASPECT_RATIO))
+        width = int(height * WINDOW_ASPECT_RATIO)
+
+        self.resize(width, height)
+        x = screen.right() - width - DEFAULT_MARGIN
+        y = screen.bottom() - height - DEFAULT_MARGIN
         self.move(x, y)
 
     def toggle_visibility(self):
