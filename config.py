@@ -7,6 +7,9 @@ from PySide6.QtCore import QSettings, QRect
 ORG_NAME = "AdTok"
 APP_NAME = "AdTokPopup"
 
+# 配置版本：窗口大小逻辑变更时递增，旧版本自动重置窗口几何
+CONFIG_VERSION = 2
+
 # ===== 默认配置 =====
 # 窗口比例保持 16:10（原 1280x800 的比例）
 WINDOW_ASPECT_RATIO = 1280 / 800  # = 1.6
@@ -32,6 +35,10 @@ class AppConfig:
 
     def __init__(self):
         self.settings = QSettings(ORG_NAME, APP_NAME)
+        # 配置版本不匹配时重置窗口几何（适配默认大小逻辑变更）
+        if self.settings.value("config_version", 0, type=int) != CONFIG_VERSION:
+            self.settings.remove("window_geometry")
+            self.settings.setValue("config_version", CONFIG_VERSION)
 
     # ---- 窗口几何 ----
     @property
