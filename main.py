@@ -4,8 +4,8 @@ AdTok 入口文件
 """
 import sys
 
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QStyle
+from PySide6.QtGui import QAction
 from PySide6.QtCore import Qt
 
 from config import AppConfig, HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK, HOTKEY_DESC
@@ -15,7 +15,7 @@ from hotkey import HotkeyManager
 
 def create_tray(app: QApplication, window: PopupWindow) -> QSystemTrayIcon:
     """创建系统托盘图标和菜单"""
-    icon = app.style().standardIcon(QApplication.style().SP_ComputerIcon)
+    icon = app.style().standardIcon(QStyle.SP_ComputerIcon)
     tray = QSystemTrayIcon(icon, app)
     tray.setToolTip(f"AdTok  老板键: {HOTKEY_DESC}")
 
