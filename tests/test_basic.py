@@ -108,8 +108,8 @@ class TestPopupWindow:
         window = PopupWindow(config)
 
         # 基本属性验证
-        assert window.minimumWidth() == 300
-        assert window.minimumHeight() == 400
+        assert window.minimumWidth() == 1000
+        assert window.minimumHeight() == 600
         assert window.width() == DEFAULT_WIDTH
         assert window.height() == DEFAULT_HEIGHT
 

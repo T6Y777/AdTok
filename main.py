@@ -61,7 +61,10 @@ def main():
 
     # 全局热键（老板键）
     hotkey = HotkeyManager()
-    hotkey.register(HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK, window.toggle_visibility)
+    hotkey_ok = hotkey.register(HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK, window.toggle_visibility)
+    if not hotkey_ok:
+        # 热键注册失败（可能被其他程序占用），用托盘气泡提示
+        tray.showMessage("AdTok", f"热键 {HOTKEY_DESC} 注册失败，可能被其他程序占用", QSystemTrayIcon.Warning, 3000)
 
     # 退出时保存状态 + 清理热键
     def on_quit():

@@ -8,8 +8,8 @@ ORG_NAME = "AdTok"
 APP_NAME = "AdTokPopup"
 
 # ===== 默认配置 =====
-DEFAULT_WIDTH = 360
-DEFAULT_HEIGHT = 640
+DEFAULT_WIDTH = 1280
+DEFAULT_HEIGHT = 800
 DEFAULT_MARGIN = 10          # 距屏幕边缘像素
 DEFAULT_URL = "https://www.douyin.com"
 DEFAULT_ALWAYS_ON_TOP = True
@@ -17,8 +17,8 @@ DEFAULT_ALWAYS_ON_TOP = True
 # ===== 全局热键配置 =====
 HOTKEY_ID = 1
 HOTKEY_MOD = 0x0002          # MOD_CONTROL (Ctrl)
-HOTKEY_VK = 0xC0             # VK_OEM_3 (`~ 键)
-HOTKEY_DESC = "Ctrl + `"     # 给用户看的热键描述
+HOTKEY_VK = 0x4D             # VK_M (M 键)
+HOTKEY_DESC = "Ctrl + M"     # 给用户看的热键描述
 
 
 class AppConfig:

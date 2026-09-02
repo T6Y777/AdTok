@@ -113,7 +113,7 @@ class PopupWindow(QWidget):
         self.setWindowFlags(flags)
 
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setMinimumSize(300, 400)
+        self.setMinimumSize(1000, 600)
         self.resize(DEFAULT_WIDTH, DEFAULT_HEIGHT)
 
         # 最外层布局
@@ -168,18 +168,19 @@ class PopupWindow(QWidget):
         self.web_container.layout().addWidget(self.web_view)
 
     def _position_window(self):
-        """定位窗口：有保存位置就用，没有就放屏幕右下角"""
+        """定位窗口：有保存位置且尺寸合法就用，否则放屏幕右下角"""
         saved = self.config.window_geometry
         if (
             saved.isValid()
             and saved.x() >= 0
             and saved.y() >= 0
-            and saved.width() > 0
-            and saved.height() > 0
+            and saved.width() >= self.minimumWidth()
+            and saved.height() >= self.minimumHeight()
         ):
             self.setGeometry(saved)
             return
 
+        # 默认右下角
         screen = self.screen().availableGeometry()
         x = screen.right() - DEFAULT_WIDTH - DEFAULT_MARGIN
         y = screen.bottom() - DEFAULT_HEIGHT - DEFAULT_MARGIN

@@ -57,7 +57,8 @@ class HotkeyManager(QAbstractNativeEventFilter):
 
     def nativeEventFilter(self, eventType, message):
         """Qt 原生事件过滤器，捕获 WM_HOTKEY"""
-        if eventType == b"windows_generic_MSG":
+        # Windows 上可能是两种事件类型，都要匹配
+        if eventType in (b"windows_generic_MSG", b"windows_dispatcher_MSG"):
             try:
                 msg = wintypes.MSG.from_address(int(message))
                 if msg.message == WM_HOTKEY and msg.wParam == self._hotkey_id:
