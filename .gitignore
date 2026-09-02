@@ -1,64 +1,10 @@
-# ---- 操作系统 ----
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# ---- IDE / 编辑器 ----
-.idea/
-.vscode/
-*.suo
-*.sln.ide
-*.user
-*.swp
-*.swo
-
-# ---- 日志 / 临时文件 ----
-*.log
-logs/
-tmp/
-temp/
-*.tmp
-*.bak
-
-# ---- 环境变量 / 密钥（安全） ----
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-secrets/
-
-# ---- Node.js / 前端 ----
-node_modules/
-npm-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.exe
+*.spec
 dist/
 build/
-coverage/
-.vite/
-
-# ---- Python ----
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-venv/
-env/
+*.log
 .pytest_cache/
-.mypy_cache/
-.ipynb_checkpoints/
-
-# ---- Java ----
-target/
-*.class
-*.jar
-!.mvn/wrapper/maven-wrapper.jar
-
-# ---- 数据 / 上传产物 ----
-*.csv.tmp
-data/raw/
-data/tmp/
-
-# ---- 其他 ----
-.DS_Store
