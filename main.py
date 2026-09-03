@@ -123,27 +123,29 @@ TITLEBAR_JS = """
     }
 
     // ===== 窗口拖动功能 =====
+    var TITLEBAR_HEIGHT = 32;
     var isWinDragging = false;
     var dragStartMouseX, dragStartMouseY;
     var dragStartWinX, dragStartWinY;
     var lastMoveTime = 0;
-    var dragBar = null;
 
-    function startWindowDrag(e) {
+    async function startWindowDrag(e) {
         if (e.button !== 0) return;
-        if (e.target.closest('button')) return;
+        if (e.clientY > TITLEBAR_HEIGHT) return;
+        if (e.target.closest && e.target.closest('#adtok-titlebar button')) return;
         if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.js_get_window_position) return;
+
         try {
-            var pos = window.pywebview.api.js_get_window_position();
+            var pos = await window.pywebview.api.js_get_window_position();
             dragStartWinX = pos[0];
             dragStartWinY = pos[1];
         } catch(err) { return; }
+
         isWinDragging = true;
         dragStartMouseX = e.screenX;
         dragStartMouseY = e.screenY;
         try { e.target.setPointerCapture(e.pointerId); } catch(err) {}
         e.preventDefault();
-        e.stopPropagation();
     }
 
     function onWindowDrag(e) {
@@ -171,7 +173,6 @@ TITLEBAR_JS = """
 
         var bar = document.createElement('div');
         bar.id = 'adtok-titlebar';
-        dragBar = bar;
 
         var title = document.createElement('span');
         title.className = 'adtok-title';
@@ -199,14 +200,11 @@ TITLEBAR_JS = """
         bar.appendChild(title);
         bar.appendChild(btnMin);
         bar.appendChild(btnClose);
-        // 挂到 html 元素上，避免受 body transform（中键平移）影响
         document.documentElement.appendChild(bar);
-
-        // 标题栏可拖动窗口（用 pointer 事件，更可靠）
-        bar.addEventListener('pointerdown', startWindowDrag);
     }
 
-    // 全局监听 pointer 事件，确保拖动不丢失
+    // 全局捕获阶段监听，基于坐标判断是否在标题栏区域
+    window.addEventListener('pointerdown', startWindowDrag, true);
     window.addEventListener('pointermove', onWindowDrag, true);
     window.addEventListener('pointerup', endWindowDrag, true);
     window.addEventListener('pointercancel', endWindowDrag, true);
@@ -292,6 +290,7 @@ def js_move_window(x, y):
             _window_ref.move(int(x), int(y))
         except (ValueError, TypeError):
             pass
+
 
 # ============ 全局状态 ============
 
