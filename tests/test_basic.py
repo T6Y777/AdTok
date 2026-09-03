@@ -147,8 +147,9 @@ class TestScreenCalc:
 
     def test_calc_default_window_returns_reasonable_size(self):
         x, y, w, h = calc_default_window()
-        assert w >= 480
-        assert h >= 270
+        # 默认高度190，宽度约338 (16:9)
+        assert 300 <= w <= 400
+        assert 180 <= h <= 200
         # 比例接近 16:9
         ratio = w / h
         assert abs(ratio - WINDOW_ASPECT_RATIO) < 0.05

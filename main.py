@@ -39,20 +39,11 @@ def get_screen_workarea():
 
 
 def calc_default_window():
-    """计算默认窗口大小和右下角位置（含最小尺寸兜底）"""
+    """计算默认窗口大小和右下角位置（16:9，默认高度190）"""
     screen_x, screen_y, screen_w, screen_h = get_screen_workarea()
-    target_area = screen_w * screen_h * WINDOW_AREA_RATIO
-    height = int(math.sqrt(target_area / WINDOW_ASPECT_RATIO))
-    width = int(height * WINDOW_ASPECT_RATIO)
-
-    # 最小尺寸兜底，保持比例
-    MIN_W, MIN_H = 480, 270
-    if width < MIN_W:
-        width = MIN_W
-        height = int(width / WINDOW_ASPECT_RATIO)
-    if height < MIN_H:
-        height = MIN_H
-        width = int(height * WINDOW_ASPECT_RATIO)
+    # 默认高度190，宽度按16:9计算
+    height = 190
+    width = int(height * WINDOW_ASPECT_RATIO)  # ≈338
 
     x = screen_x + screen_w - width - DEFAULT_MARGIN
     y = screen_y + screen_h - height - DEFAULT_MARGIN
@@ -167,15 +158,16 @@ TITLEBAR_JS = """
     }
     setInterval(checkUrlChange, 500);
 
-    // Ctrl+滚轮缩放
+    // Ctrl+滚轮缩放窗口大小（保持16:9比例）
     window.addEventListener('wheel', function(e) {
         if (e.ctrlKey) {
             e.preventDefault();
-            if (e.deltaY < 0) {
-                applyZoom(currentZoom + ZOOM_STEP);
-            } else {
-                applyZoom(currentZoom - ZOOM_STEP);
-            }
+            var delta = e.deltaY < 0 ? 20 : -20;  // 向上滚增大，向下滚缩小
+            try {
+                if (window.pywebview && window.pywebview.api && window.pywebview.api.js_resize_window) {
+                    window.pywebview.api.js_resize_window(delta);
+                }
+            } catch(err) {}
         }
     }, { passive: false });
 
@@ -278,6 +270,30 @@ def js_move_window(x, y):
         except (ValueError, TypeError):
             pass
 
+def js_resize_window(delta_height):
+    """JS 可调用：调整窗口大小，保持16:9比例（Ctrl+滚轮）"""
+    if not _window_ref:
+        return
+    try:
+        current_h = _window_ref.height if _window_ref.height else 190
+        new_h = int(current_h) + int(delta_height)
+        # 最小高度100，最大高度为屏幕工作区高度的90%
+        _, _, _, screen_h = get_screen_workarea()
+        new_h = max(100, min(new_h, int(screen_h * 0.9)))
+        new_w = int(new_h * WINDOW_ASPECT_RATIO)
+
+        _window_ref.resize(new_w, new_h)
+
+        # 保存到配置
+        if _config_ref:
+            _config_ref.window_geometry.width = new_w
+            _config_ref.window_geometry.height = new_h
+            _config_ref.window_geometry.x = _window_ref.x if _window_ref.x is not None else 0
+            _config_ref.window_geometry.y = _window_ref.y if _window_ref.y is not None else 0
+            _config_ref.save()
+    except (ValueError, TypeError):
+        pass
+
 def js_save_zoom(zoom_value):
     """JS 可调用：保存页面缩放比例"""
     try:
@@ -349,8 +365,8 @@ def main():
         saved.isValid()
         and saved.x >= 0
         and saved.y >= 0
-        and saved.width >= 480
-        and saved.height >= 300
+        and saved.width >= 200
+        and saved.height >= 113
     ):
         x, y, width, height = saved.x, saved.y, saved.width, saved.height
     else:
@@ -374,7 +390,7 @@ def main():
     _window_ref = window
     _config_ref = config
     # 用 expose 单独暴露函数，避免 js_api 对象的递归遍历 bug
-    window.expose(js_close, js_get_window_position, js_move_window, js_save_zoom)
+    window.expose(js_close, js_get_window_position, js_move_window, js_save_zoom, js_resize_window)
 
     # 页面加载完成后注入标题栏和中键拖动平移
     def on_loaded():
