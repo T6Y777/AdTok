@@ -141,13 +141,13 @@ TITLEBAR_JS = """
 
 
     // ===== 页面缩放（Ctrl+滚轮 / Ctrl+加减号 / Ctrl+0） =====
-    var currentZoom = window.__adtok_saved_zoom || 1.0;
+    var currentZoom = window.__adtok_saved_zoom || 0.5;
     var MIN_ZOOM = 0.3;
     var MAX_ZOOM = 3.0;
     var ZOOM_STEP = 0.1;
     var VIDEO_ZOOM = 0.7;  // 视频页默认缩放比例（缩小3次）
     var lastUrl = window.location.href;
-    var homeZoom = window.__adtok_saved_zoom || 1.0;  // 主页/非视频页的缩放比例
+    var homeZoom = window.__adtok_saved_zoom || 0.5;  // 主页/非视频页的缩放比例
 
     function applyZoom(z) {
         currentZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
@@ -428,7 +428,7 @@ def main():
             document.head.appendChild(style);
             // 恢复保存的缩放比例
             var savedZoom = {zoom_json};
-            if (savedZoom && savedZoom !== 1.0) {{
+            if (savedZoom && savedZoom !== 0.5) {{
                 document.documentElement.style.zoom = savedZoom;
                 // 同步 currentZoom 变量（在 TITLEBAR_JS 闭包中通过全局变量传递）
                 window.__adtok_saved_zoom = savedZoom;

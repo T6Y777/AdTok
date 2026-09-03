@@ -11,9 +11,9 @@ ORG_NAME = "AdTok"
 APP_NAME = "AdTokPopup"
 
 # 配置版本：窗口大小逻辑变更时递增，旧版本自动重置窗口几何
-CONFIG_VERSION = 14
+CONFIG_VERSION = 15
 
-# 窗口比例保持 16:10
+# 窗口比例保持 16:9
 WINDOW_ASPECT_RATIO = 16 / 9  # = 1.778，视频比例
 # 窗口面积占屏幕可用面积的比例
 WINDOW_AREA_RATIO = 1 / 9
@@ -70,6 +70,7 @@ class AppConfig:
         # 配置版本不匹配时重置窗口几何
         if self._data.get("config_version", 0) != CONFIG_VERSION:
             self._data.pop("window_geometry", None)
+            self._data.pop("zoom", None)  # 清除旧的缩放比例，使用新默认值
             self._data["config_version"] = CONFIG_VERSION
             self._save()
 
@@ -122,7 +123,7 @@ class AppConfig:
     # ---- 页面缩放比例 ----
     @property
     def zoom(self) -> float:
-        return self._data.get("zoom", 1.0)
+        return self._data.get("zoom", 0.5)
 
     @zoom.setter
     def zoom(self, value: float):
