@@ -27,6 +27,27 @@ from config import (
 from hotkey import HotkeyManager
 
 
+# ============ 单实例锁 ============
+
+def ensure_single_instance():
+    """确保只有一个 AdTok 实例运行，返回 True 表示是第一个实例。
+    多实例会导致全局热键注册冲突（RegisterHotKey 重复注册失败）。"""
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    CreateMutexW = kernel32.CreateMutexW
+    CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+    CreateMutexW.restype = wintypes.HANDLE
+
+    mutex_name = "AdTok_SingleInstance_Mutex"
+    mutex = CreateMutexW(None, False, mutex_name)
+    last_error = ctypes.get_last_error()
+
+    ERROR_ALREADY_EXISTS = 183
+    if last_error == ERROR_ALREADY_EXISTS:
+        kernel32.CloseHandle(mutex)
+        return False
+    return True
+
+
 # ============ 屏幕工具 ============
 
 def get_screen_workarea():
@@ -357,6 +378,10 @@ def save_config_on_exit(config, window):
 # ============ 主函数 ============
 
 def main():
+    # 单实例检测：防止多实例导致全局热键冲突
+    if not ensure_single_instance():
+        print("AdTok 已在运行中，请勿重复启动。")
+        return
     config = AppConfig()
 
     # 确定窗口位置和大小
@@ -384,7 +409,7 @@ def main():
         easy_drag=False,
         resizable=True,
         background_color='#ffffff',
-        on_top=config.always_on_top,
+        on_top=False,  # 不置顶，允许被其他窗口遮挡
     )
     global _window_ref, _config_ref
     _window_ref = window
