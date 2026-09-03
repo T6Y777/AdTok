@@ -212,10 +212,10 @@ TITLEBAR_JS = """
 
 
 
-    // ===== Ctrl+滚轮缩放页面 =====
-    var currentZoom = 1.0;
-    var MIN_ZOOM = 0.5;
-    var MAX_ZOOM = 2.5;
+    // ===== 页面缩放（Ctrl+滚轮 / Ctrl+加减号 / Ctrl+0） =====
+    var currentZoom = window.__adtok_saved_zoom || 1.0;
+    var MIN_ZOOM = 0.3;
+    var MAX_ZOOM = 3.0;
     var ZOOM_STEP = 0.1;
 
     function applyZoom(z) {
@@ -228,6 +228,7 @@ TITLEBAR_JS = """
         } catch(err) {}
     }
 
+    // Ctrl+滚轮缩放
     window.addEventListener('wheel', function(e) {
         if (e.ctrlKey) {
             e.preventDefault();
@@ -238,6 +239,22 @@ TITLEBAR_JS = """
             }
         }
     }, { passive: false });
+
+    // Ctrl+加号/减号/0 快捷键缩放
+    window.addEventListener('keydown', function(e) {
+        if (e.ctrlKey) {
+            if (e.key === '=' || e.key === '+') {
+                e.preventDefault();
+                applyZoom(currentZoom + ZOOM_STEP);
+            } else if (e.key === '-' || e.key === '_') {
+                e.preventDefault();
+                applyZoom(currentZoom - ZOOM_STEP);
+            } else if (e.key === '0') {
+                e.preventDefault();
+                applyZoom(1.0);
+            }
+        }
+    });
 
     inject();
 })();
@@ -428,6 +445,8 @@ def main():
             var savedZoom = {zoom_json};
             if (savedZoom && savedZoom !== 1.0) {{
                 document.documentElement.style.zoom = savedZoom;
+                // 同步 currentZoom 变量（在 TITLEBAR_JS 闭包中通过全局变量传递）
+                window.__adtok_saved_zoom = savedZoom;
             }}
             {TITLEBAR_JS}
             {PAN_JS}
@@ -465,7 +484,7 @@ def main():
     threading.Thread(target=_tray_icon.run, daemon=True).start()
 
     # 启动（阻塞主线程）
-    webview.start()
+    webview.start(private_mode=False)
 
 
 if __name__ == '__main__':
