@@ -2,6 +2,8 @@
 
 把抖音 / B 站网页版伪装成右下角广告弹窗的摸鱼神器。
 
+![AdTok 截图](docs/screenshot.png)
+
 ## 技术栈
 
 - **pywebview + WebView2**（Edge Chromium 内核，完整支持 H.264 视频解码）
@@ -62,7 +64,9 @@ AdTok/
 ├── config.py         # 配置管理（JSON 持久化）
 ├── hotkey.py         # Windows 全局热键（纯 Win32 API）
 ├── requirements.txt  # 依赖
-├── run.bat           # 双击启动脚本
+├── run.bat           # 双击启动脚本（无 cmd 黑框）
+├── docs/
+│   └── screenshot.png # 项目截图
 └── tests/            # 单元测试
 ```
 
