@@ -360,11 +360,14 @@ def create_tray_image():
 def save_config_on_exit(config, window):
     """退出时保存窗口位置和当前网址"""
     try:
-        geom = WindowGeometry(
-            x=window.x, y=window.y,
-            width=window.width, height=window.height,
-        )
-        config.window_geometry = geom
+        # 确保窗口大小有效，避免保存0,0,0,0
+        w = window.width if window.width and window.width > 0 else config.window_geometry.width
+        h = window.height if window.height and window.height > 0 else config.window_geometry.height
+        x = window.x if window.x is not None else config.window_geometry.x
+        y = window.y if window.y is not None else config.window_geometry.y
+        if w and w > 0 and h and h > 0:
+            geom = WindowGeometry(x=x, y=y, width=w, height=h)
+            config.window_geometry = geom
     except Exception:
         pass
     try:
@@ -426,9 +429,9 @@ def main():
             var style = document.createElement('style');
             style.textContent = {css_json};
             document.head.appendChild(style);
-            // 恢复保存的缩放比例
+            // 恢复保存的缩放比例（总是应用，包括默认值）
             var savedZoom = {zoom_json};
-            if (savedZoom && savedZoom !== 0.3) {{
+            if (savedZoom) {{
                 document.documentElement.style.zoom = savedZoom;
                 // 同步 currentZoom 变量（在 TITLEBAR_JS 闭包中通过全局变量传递）
                 window.__adtok_saved_zoom = savedZoom;
@@ -438,6 +441,25 @@ def main():
         }})();
         """
         window.evaluate_js(js_code)
+
+        # 强制设置窗口大小（WebView2初始化后可能自动调整窗口大小）
+        # 仅当配置中的窗口大小无效时，才强制使用默认值
+        saved_geom = config.window_geometry
+        if (not saved_geom.isValid() or saved_geom.width <= 0 or saved_geom.height <= 0):
+            _, _, default_w, default_h = calc_default_window()
+            def _force_resize():
+                try:
+                    window.resize(default_w, default_h)
+                    # 保存到配置，避免下次再次强制resize
+                    config.window_geometry = WindowGeometry(
+                        x=window.x if window.x is not None else 0,
+                        y=window.y if window.y is not None else 0,
+                        width=default_w, height=default_h
+                    )
+                except Exception:
+                    pass
+            # 延迟1秒，确保WebView2完成所有初始化后再设置窗口大小
+            threading.Timer(1.0, _force_resize).start()
 
     window.events.loaded += on_loaded
 
