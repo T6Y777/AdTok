@@ -217,6 +217,9 @@ TITLEBAR_JS = """
     var MIN_ZOOM = 0.3;
     var MAX_ZOOM = 3.0;
     var ZOOM_STEP = 0.1;
+    var VIDEO_ZOOM = 0.7;  // 视频页默认缩放比例（缩小3次）
+    var lastUrl = window.location.href;
+    var homeZoom = window.__adtok_saved_zoom || 1.0;  // 主页/非视频页的缩放比例
 
     function applyZoom(z) {
         currentZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
@@ -227,6 +230,26 @@ TITLEBAR_JS = """
             }
         } catch(err) {}
     }
+
+    // 监听 URL 变化（抖音是 SPA，页面切换不刷新）
+    function checkUrlChange() {
+        var currentUrl = window.location.href;
+        if (currentUrl !== lastUrl) {
+            var wasVideoPage = lastUrl.indexOf('/video/') !== -1;
+            var isVideoPage = currentUrl.indexOf('/video/') !== -1;
+            lastUrl = currentUrl;
+
+            if (isVideoPage && !wasVideoPage) {
+                // 刚进入视频页：保存主页缩放，应用视频页默认缩放
+                homeZoom = currentZoom;
+                applyZoom(VIDEO_ZOOM);
+            } else if (!isVideoPage && wasVideoPage) {
+                // 刚离开视频页：恢复主页缩放
+                applyZoom(homeZoom);
+            }
+        }
+    }
+    setInterval(checkUrlChange, 500);
 
     // Ctrl+滚轮缩放
     window.addEventListener('wheel', function(e) {
