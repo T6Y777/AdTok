@@ -11,7 +11,7 @@ ORG_NAME = "AdTok"
 APP_NAME = "AdTokPopup"
 
 # 配置版本：窗口大小逻辑变更时递增，旧版本自动重置窗口几何
-CONFIG_VERSION = 4
+CONFIG_VERSION = 5
 
 # 窗口比例保持 16:10
 WINDOW_ASPECT_RATIO = 1280 / 800  # = 1.6

@@ -114,33 +114,35 @@ body {
 
 TITLEBAR_JS = """
 (function() {
-    if (document.getElementById('adtok-titlebar')) return;
-    var bar = document.createElement('div');
-    bar.id = 'adtok-titlebar';
-    bar.innerHTML =
-        '<span class="adtok-title">热门推荐</span>' +
-        '<button onclick="window.pywebview.api.minimize()" title="最小化">&#8212;</button>' +
-        '<button class="adtok-close" onclick="window.pywebview.api.close()" title="关闭">&#10005;</button>';
-    document.body.appendChild(bar);
+    function inject() {
+        if (document.getElementById('adtok-titlebar')) return;
+        if (!document.body) { setTimeout(inject, 100); return; }
+        var bar = document.createElement('div');
+        bar.id = 'adtok-titlebar';
+        bar.innerHTML =
+            '<span class="adtok-title">热门推荐</span>' +
+            '<button onclick="window.pywebview.api.js_minimize()" title="最小化">&#8212;</button>' +
+            '<button class="adtok-close" onclick="window.pywebview.api.js_close()" title="关闭">&#10005;</button>';
+        document.body.appendChild(bar);
+    }
+    inject();
 })();
 """
 
 
-# ============ JS API（供网页调用） ============
+# ============ JS 暴露函数（避免 js_api 对象的递归遍历 bug） ============
 
-class JsApi:
-    """暴露给网页的 Python API"""
+_window_ref = None
 
-    def __init__(self):
-        self.window = None
+def js_minimize():
+    """JS 可调用：最小化窗口"""
+    if _window_ref:
+        _window_ref.minimize()
 
-    def minimize(self):
-        if self.window:
-            self.window.minimize()
-
-    def close(self):
-        if self.window:
-            self.window.hide()
+def js_close():
+    """JS 可调用：隐藏窗口到托盘"""
+    if _window_ref:
+        _window_ref.hide()
 
 
 # ============ 全局状态 ============
@@ -208,9 +210,6 @@ def main():
     else:
         x, y, width, height = calc_default_window()
 
-    # 创建 JS API
-    js_api = JsApi()
-
     # 创建无边框窗口
     window = webview.create_window(
         title='热门推荐',
@@ -222,10 +221,12 @@ def main():
         frameless=True,
         easy_drag=False,
         background_color='#ffffff',
-        js_api=js_api,
         on_top=config.always_on_top,
     )
-    js_api.window = window
+    global _window_ref
+    _window_ref = window
+    # 用 expose 单独暴露函数，避免 js_api 对象的递归遍历 bug
+    window.expose(js_minimize, js_close)
 
     # 页面加载完成后注入标题栏
     def on_loaded():
