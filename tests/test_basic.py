@@ -77,10 +77,11 @@ class TestAppConfig:
         test_url = "https://www.bilibili.com"
         config.current_url = test_url
         assert config.current_url == test_url
-        config.current_url = original
+        config.current_url = original  # 还原
 
     def test_set_and_get_geometry(self):
         config = AppConfig()
+        original = config.window_geometry
         test_geom = WindowGeometry(100, 200, 600, 400)
         config.window_geometry = test_geom
         saved = config.window_geometry
@@ -88,6 +89,7 @@ class TestAppConfig:
         assert saved.y == 200
         assert saved.width == 600
         assert saved.height == 400
+        config.window_geometry = original  # 还原
 
     def test_config_version_is_latest(self):
         config = AppConfig()

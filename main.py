@@ -129,6 +129,57 @@ TITLEBAR_JS = """
 })();
 """
 
+# 中键拖动平移页面：按住鼠标中键拖动，平移整个网页内容，查看被窗口裁剪的部分
+PAN_JS = """
+(function() {
+    if (window.__adtok_pan_enabled) return;
+    window.__adtok_pan_enabled = true;
+
+    var isDragging = false;
+    var startX, startY;
+    var offsetX = 0, offsetY = 0;
+    var baseX = 0, baseY = 0;
+
+    document.addEventListener('mousedown', function(e) {
+        if (e.button === 1) { // 鼠标中键
+            e.preventDefault();
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            baseX = offsetX;
+            baseY = offsetY;
+            document.body.style.cursor = 'grabbing';
+            document.body.style.userSelect = 'none';
+        }
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        offsetX = baseX + (e.clientX - startX);
+        offsetY = baseY + (e.clientY - startY);
+        document.body.style.transform = 'translate(' + offsetX + 'px, ' + offsetY + 'px)';
+    });
+
+    function endDrag(e) {
+        if (e.button === 1 && isDragging) {
+            isDragging = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+    }
+    document.addEventListener('mouseup', endDrag);
+    document.addEventListener('mouseleave', endDrag);
+
+    // 禁用中键默认的自动滚动和点击行为
+    document.addEventListener('auxclick', function(e) {
+        if (e.button === 1) e.preventDefault();
+    });
+    document.addEventListener('mousedown', function(e) {
+        if (e.button === 1) e.preventDefault();
+    }, true);
+})();
+"""
+
 
 # ============ JS 暴露函数（避免 js_api 对象的递归遍历 bug） ============
 
@@ -228,7 +279,7 @@ def main():
     # 用 expose 单独暴露函数，避免 js_api 对象的递归遍历 bug
     window.expose(js_minimize, js_close)
 
-    # 页面加载完成后注入标题栏
+    # 页面加载完成后注入标题栏和中键拖动平移
     def on_loaded():
         css_json = json.dumps(TITLEBAR_CSS)
         js_code = f"""
@@ -237,6 +288,7 @@ def main():
             style.textContent = {css_json};
             document.head.appendChild(style);
             {TITLEBAR_JS}
+            {PAN_JS}
         }})();
         """
         window.evaluate_js(js_code)
