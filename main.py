@@ -46,7 +46,7 @@ def calc_default_window():
     width = int(height * WINDOW_ASPECT_RATIO)
 
     # 最小尺寸兜底，保持比例
-    MIN_W, MIN_H = 640, 400
+    MIN_W, MIN_H = 480, 300
     if width < MIN_W:
         width = MIN_W
         height = int(width / WINDOW_ASPECT_RATIO)
@@ -167,6 +167,45 @@ TITLEBAR_JS = """
         }
     }
 
+    // ===== 窗口大小调整（右下角手柄拖拽） =====
+    var isResizing = false;
+    var resizeStartX, resizeStartY;
+    var resizeStartW, resizeStartH;
+    var MIN_W = 360, MIN_H = 240;
+
+    async function startResize(e) {
+        if (e.button !== 0) return;
+        if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.js_get_window_size) return;
+        try {
+            var size = await window.pywebview.api.js_get_window_size();
+            resizeStartW = size[0];
+            resizeStartH = size[1];
+        } catch(err) { return; }
+        isResizing = true;
+        resizeStartX = e.screenX;
+        resizeStartY = e.screenY;
+        try { e.target.setPointerCapture(e.pointerId); } catch(err) {}
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function onResize(e) {
+        if (!isResizing) return;
+        var newW = resizeStartW + (e.screenX - resizeStartX);
+        var newH = resizeStartH + (e.screenY - resizeStartY);
+        newW = Math.max(MIN_W, newW);
+        newH = Math.max(MIN_H, newH);
+        try { window.pywebview.api.js_resize_window(newW, newH); } catch(err) {}
+        e.preventDefault();
+    }
+
+    function endResize(e) {
+        if (e.button === 0 && isResizing) {
+            isResizing = false;
+            try { e.target.releasePointerCapture(e.pointerId); } catch(err) {}
+        }
+    }
+
     function inject() {
         if (document.getElementById('adtok-titlebar')) return;
         if (!document.documentElement) { setTimeout(inject, 100); return; }
@@ -201,6 +240,12 @@ TITLEBAR_JS = """
         bar.appendChild(btnMin);
         bar.appendChild(btnClose);
         document.documentElement.appendChild(bar);
+
+        // 右下角调整大小手柄
+        var handle = document.createElement('div');
+        handle.id = 'adtok-resize-handle';
+        handle.addEventListener('pointerdown', startResize);
+        document.documentElement.appendChild(handle);
     }
 
     // 全局捕获阶段监听，基于坐标判断是否在标题栏区域
@@ -208,6 +253,11 @@ TITLEBAR_JS = """
     window.addEventListener('pointermove', onWindowDrag, true);
     window.addEventListener('pointerup', endWindowDrag, true);
     window.addEventListener('pointercancel', endWindowDrag, true);
+
+    // 调整大小事件监听
+    window.addEventListener('pointermove', onResize, true);
+    window.addEventListener('pointerup', endResize, true);
+    window.addEventListener('pointercancel', endResize, true);
 
     inject();
 })();
@@ -299,6 +349,14 @@ def js_resize_window(width, height):
         except (ValueError, TypeError):
             pass
 
+def js_get_window_size():
+    """JS 可调用：获取窗口当前大小 (width, height)，用于拖拽调整大小"""
+    if _window_ref:
+        w = _window_ref.width if _window_ref.width is not None else 480
+        h = _window_ref.height if _window_ref.height is not None else 300
+        return (int(w), int(h))
+    return (480, 300)
+
 
 # ============ 全局状态 ============
 
@@ -382,7 +440,7 @@ def main():
     global _window_ref
     _window_ref = window
     # 用 expose 单独暴露函数，避免 js_api 对象的递归遍历 bug
-    window.expose(js_close, js_get_window_position, js_move_window, js_resize_window)
+    window.expose(js_close, js_get_window_position, js_move_window, js_resize_window, js_get_window_size)
 
     # 页面加载完成后注入标题栏和中键拖动平移
     def on_loaded():
