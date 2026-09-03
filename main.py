@@ -62,53 +62,10 @@ def calc_default_window():
 # ============ 注入的标题栏 ============
 
 TITLEBAR_CSS = """
-#adtok-titlebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 32px;
-    background: #f5f5f5;
-    border-bottom: 1px solid #e0e0e0;
-    z-index: 999999;
-    display: flex;
-    align-items: center;
-    padding: 0 4px 0 12px;
-    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-    -webkit-app-region: drag;
-    app-region: drag;
-}
-#adtok-titlebar .adtok-title {
-    color: #999;
-    font-size: 12px;
-    flex: 1;
-    user-select: none;
-}
-#adtok-titlebar button {
-    -webkit-app-region: no-drag;
-    app-region: no-drag;
-    border: none;
-    background: transparent;
-    color: #999;
-    font-size: 13px;
-    width: 32px;
-    height: 24px;
-    border-radius: 4px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-#adtok-titlebar button:hover {
-    background: #e0e0e0;
-    color: #333;
-}
-#adtok-titlebar button.adtok-close:hover {
-    background: #e81123;
-    color: white;
-}
+/* 标题栏已移除，内容占满整个窗口 */
 body {
-    padding-top: 32px !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 """
 
@@ -124,7 +81,7 @@ TITLEBAR_JS = """
     async function startWindowDrag(e) {
         if (e.button !== 0) return;
         if (e.clientY > DRAG_ZONE_HEIGHT) return;
-        if (e.target.closest && e.target.closest('#adtok-titlebar button')) return;
+        // 标题栏已移除，无需排除按钮区域
         if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.js_get_window_position) return;
 
         try {
@@ -160,40 +117,7 @@ TITLEBAR_JS = """
     }
 
     function inject() {
-        if (document.getElementById('adtok-titlebar')) return;
-        if (!document.documentElement) { setTimeout(inject, 100); return; }
-
-        var bar = document.createElement('div');
-        bar.id = 'adtok-titlebar';
-
-        var title = document.createElement('span');
-        title.className = 'adtok-title';
-        title.textContent = '热门推荐';
-
-        var btnMin = document.createElement('button');
-        btnMin.innerHTML = '&#8212;';
-        btnMin.title = '隐藏';
-        btnMin.addEventListener('click', function(e) {
-            e.stopPropagation();
-            e.preventDefault();
-            hideWindow();
-        });
-
-        var btnClose = document.createElement('button');
-        btnClose.className = 'adtok-close';
-        btnClose.innerHTML = '&#10005;';
-        btnClose.title = '隐藏';
-        btnClose.addEventListener('click', function(e) {
-            e.stopPropagation();
-            e.preventDefault();
-            hideWindow();
-        });
-
-        bar.appendChild(title);
-        bar.appendChild(btnMin);
-        bar.appendChild(btnClose);
-        document.documentElement.appendChild(bar);
-
+        // 标题栏已移除，无需创建元素
     }
 
     // 全局捕获阶段监听，基于坐标判断是否在标题栏区域
@@ -434,7 +358,7 @@ def main():
 
     # 创建无边框窗口
     window = webview.create_window(
-        title='热门推荐',
+        title='AdTok',
         url=config.current_url,
         width=width,
         height=height,
