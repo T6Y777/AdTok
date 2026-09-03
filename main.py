@@ -156,7 +156,52 @@ TITLEBAR_JS = """
         bar.appendChild(btnMin);
         bar.appendChild(btnClose);
         document.body.appendChild(bar);
+
+        // 标题栏可拖动窗口
+        bar.addEventListener('mousedown', startWindowDrag);
     }
+
+    // ===== 窗口拖动功能 =====
+    var isWinDragging = false;
+    var dragStartMouseX, dragStartMouseY;
+    var dragStartWinX, dragStartWinY;
+    var lastMoveTime = 0;
+
+    function startWindowDrag(e) {
+        if (e.button !== 0) return;
+        if (e.target.closest('button')) return;
+        if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.js_get_window_position) return;
+        try {
+            var pos = window.pywebview.api.js_get_window_position();
+            dragStartWinX = pos[0];
+            dragStartWinY = pos[1];
+        } catch(err) { return; }
+        isWinDragging = true;
+        dragStartMouseX = e.screenX;
+        dragStartMouseY = e.screenY;
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function onWindowDrag(e) {
+        if (!isWinDragging) return;
+        var now = Date.now();
+        if (now - lastMoveTime < 16) return;
+        lastMoveTime = now;
+        var newX = dragStartWinX + (e.screenX - dragStartMouseX);
+        var newY = dragStartWinY + (e.screenY - dragStartMouseY);
+        if (isNaN(newX) || isNaN(newY)) return;
+        try { window.pywebview.api.js_move_window(newX, newY); } catch(err) {}
+    }
+
+    function endWindowDrag(e) {
+        if (e.button === 0) isWinDragging = false;
+    }
+
+    document.addEventListener('mousemove', onWindowDrag);
+    document.addEventListener('mouseup', endWindowDrag);
+    document.addEventListener('mouseleave', endWindowDrag);
+
     inject();
 })();
 """
@@ -222,6 +267,21 @@ def js_close():
     if _window_ref:
         _window_ref.hide()
 
+def js_get_window_position():
+    """JS 可调用：获取窗口当前位置 (x, y)，用于拖动"""
+    if _window_ref:
+        x = _window_ref.x if _window_ref.x is not None else 0
+        y = _window_ref.y if _window_ref.y is not None else 0
+        return (int(x), int(y))
+    return (0, 0)
+
+def js_move_window(x, y):
+    """JS 可调用：移动窗口到指定位置，用于拖动"""
+    if _window_ref and x is not None and y is not None:
+        try:
+            _window_ref.move(int(x), int(y))
+        except (ValueError, TypeError):
+            pass
 
 # ============ 全局状态 ============
 
@@ -304,7 +364,7 @@ def main():
     global _window_ref
     _window_ref = window
     # 用 expose 单独暴露函数，避免 js_api 对象的递归遍历 bug
-    window.expose(js_close)
+    window.expose(js_close, js_get_window_position, js_move_window)
 
     # 页面加载完成后注入标题栏和中键拖动平移
     def on_loaded():
