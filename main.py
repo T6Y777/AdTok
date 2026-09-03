@@ -46,7 +46,7 @@ def calc_default_window():
     width = int(height * WINDOW_ASPECT_RATIO)
 
     # 最小尺寸兜底，保持比例
-    MIN_W, MIN_H = 480, 300
+    MIN_W, MIN_H = 480, 270
     if width < MIN_W:
         width = MIN_W
         height = int(width / WINDOW_ASPECT_RATIO)
@@ -114,16 +114,8 @@ body {
 
 TITLEBAR_JS = """
 (function() {
-    function hideWindow() {
-        if (window.pywebview && window.pywebview.api && window.pywebview.api.js_close) {
-            window.pywebview.api.js_close();
-        } else {
-            setTimeout(hideWindow, 100);
-        }
-    }
-
-    // ===== 窗口拖动功能 =====
-    var TITLEBAR_HEIGHT = 32;
+    // ===== 窗口拖动功能（顶部20px隐形区域） =====
+    var DRAG_ZONE_HEIGHT = 20;
     var isWinDragging = false;
     var dragStartMouseX, dragStartMouseY;
     var dragStartWinX, dragStartWinY;
@@ -131,7 +123,7 @@ TITLEBAR_JS = """
 
     async function startWindowDrag(e) {
         if (e.button !== 0) return;
-        if (e.clientY > TITLEBAR_HEIGHT) return;
+        if (e.clientY > DRAG_ZONE_HEIGHT) return;
         if (e.target.closest && e.target.closest('#adtok-titlebar button')) return;
         if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.js_get_window_position) return;
 
@@ -377,9 +369,14 @@ _tray_icon = None
 
 
 def toggle_window(window):
-    """切换窗口显示/隐藏（热键和托盘共用）"""
+    """切换窗口显示/隐藏（热键和托盘共用），隐藏时自动暂停视频"""
     global _window_visible
     if _window_visible:
+        # 隐藏窗口时暂停所有视频
+        try:
+            window.evaluate_js("document.querySelectorAll('video').forEach(function(v){v.pause();});")
+        except Exception:
+            pass
         window.hide()
         _window_visible = False
     else:

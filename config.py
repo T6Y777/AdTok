@@ -11,10 +11,10 @@ ORG_NAME = "AdTok"
 APP_NAME = "AdTokPopup"
 
 # 配置版本：窗口大小逻辑变更时递增，旧版本自动重置窗口几何
-CONFIG_VERSION = 12
+CONFIG_VERSION = 13
 
 # 窗口比例保持 16:10
-WINDOW_ASPECT_RATIO = 1280 / 800  # = 1.6
+WINDOW_ASPECT_RATIO = 16 / 9  # = 1.778，视频比例
 # 窗口面积占屏幕可用面积的比例
 WINDOW_AREA_RATIO = 1 / 9
 DEFAULT_MARGIN = 0  # 窗口默认与屏幕边缘的间距，0 = 完全贴边
