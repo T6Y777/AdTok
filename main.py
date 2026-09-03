@@ -122,12 +122,56 @@ TITLEBAR_JS = """
         }
     }
 
+    // ===== 窗口拖动功能 =====
+    var isWinDragging = false;
+    var dragStartMouseX, dragStartMouseY;
+    var dragStartWinX, dragStartWinY;
+    var lastMoveTime = 0;
+    var dragBar = null;
+
+    function startWindowDrag(e) {
+        if (e.button !== 0) return;
+        if (e.target.closest('button')) return;
+        if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.js_get_window_position) return;
+        try {
+            var pos = window.pywebview.api.js_get_window_position();
+            dragStartWinX = pos[0];
+            dragStartWinY = pos[1];
+        } catch(err) { return; }
+        isWinDragging = true;
+        dragStartMouseX = e.screenX;
+        dragStartMouseY = e.screenY;
+        try { e.target.setPointerCapture(e.pointerId); } catch(err) {}
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function onWindowDrag(e) {
+        if (!isWinDragging) return;
+        var now = Date.now();
+        if (now - lastMoveTime < 16) return;
+        lastMoveTime = now;
+        var newX = dragStartWinX + (e.screenX - dragStartMouseX);
+        var newY = dragStartWinY + (e.screenY - dragStartMouseY);
+        if (isNaN(newX) || isNaN(newY)) return;
+        try { window.pywebview.api.js_move_window(newX, newY); } catch(err) {}
+        e.preventDefault();
+    }
+
+    function endWindowDrag(e) {
+        if (e.button === 0 && isWinDragging) {
+            isWinDragging = false;
+            try { e.target.releasePointerCapture(e.pointerId); } catch(err) {}
+        }
+    }
+
     function inject() {
         if (document.getElementById('adtok-titlebar')) return;
-        if (!document.body) { setTimeout(inject, 100); return; }
+        if (!document.documentElement) { setTimeout(inject, 100); return; }
 
         var bar = document.createElement('div');
         bar.id = 'adtok-titlebar';
+        dragBar = bar;
 
         var title = document.createElement('span');
         title.className = 'adtok-title';
@@ -155,55 +199,21 @@ TITLEBAR_JS = """
         bar.appendChild(title);
         bar.appendChild(btnMin);
         bar.appendChild(btnClose);
-        document.body.appendChild(bar);
+        // 挂到 html 元素上，避免受 body transform（中键平移）影响
+        document.documentElement.appendChild(bar);
 
-        // 标题栏可拖动窗口
-        bar.addEventListener('mousedown', startWindowDrag);
+        // 标题栏可拖动窗口（用 pointer 事件，更可靠）
+        bar.addEventListener('pointerdown', startWindowDrag);
     }
 
-    // ===== 窗口拖动功能 =====
-    var isWinDragging = false;
-    var dragStartMouseX, dragStartMouseY;
-    var dragStartWinX, dragStartWinY;
-    var lastMoveTime = 0;
-
-    function startWindowDrag(e) {
-        if (e.button !== 0) return;
-        if (e.target.closest('button')) return;
-        if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.js_get_window_position) return;
-        try {
-            var pos = window.pywebview.api.js_get_window_position();
-            dragStartWinX = pos[0];
-            dragStartWinY = pos[1];
-        } catch(err) { return; }
-        isWinDragging = true;
-        dragStartMouseX = e.screenX;
-        dragStartMouseY = e.screenY;
-        e.preventDefault();
-        e.stopPropagation();
-    }
-
-    function onWindowDrag(e) {
-        if (!isWinDragging) return;
-        var now = Date.now();
-        if (now - lastMoveTime < 16) return;
-        lastMoveTime = now;
-        var newX = dragStartWinX + (e.screenX - dragStartMouseX);
-        var newY = dragStartWinY + (e.screenY - dragStartMouseY);
-        if (isNaN(newX) || isNaN(newY)) return;
-        try { window.pywebview.api.js_move_window(newX, newY); } catch(err) {}
-    }
-
-    function endWindowDrag(e) {
-        if (e.button === 0) isWinDragging = false;
-    }
-
-    document.addEventListener('mousemove', onWindowDrag);
-    document.addEventListener('mouseup', endWindowDrag);
-    document.addEventListener('mouseleave', endWindowDrag);
+    // 全局监听 pointer 事件，确保拖动不丢失
+    window.addEventListener('pointermove', onWindowDrag, true);
+    window.addEventListener('pointerup', endWindowDrag, true);
+    window.addEventListener('pointercancel', endWindowDrag, true);
 
     inject();
 })();
+
 """
 
 # 中键拖动平移页面：按住鼠标中键拖动，平移整个网页内容，查看被窗口裁剪的部分
