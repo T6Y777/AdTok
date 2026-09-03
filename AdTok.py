@@ -315,6 +315,23 @@ def js_resize_window(delta_height):
     except (ValueError, TypeError):
         pass
 
+def js_set_window_size(width, height):
+    """JS 可调用：设置窗口绝对大小（用于延迟强制设置，对抗WebView2自动调整）"""
+    if not _window_ref or not width or not height:
+        return
+    try:
+        w, h = int(width), int(height)
+        _window_ref.resize(w, h)
+        # 保存到配置
+        if _config_ref:
+            _config_ref.window_geometry = WindowGeometry(
+                x=_window_ref.x if _window_ref.x is not None else 0,
+                y=_window_ref.y if _window_ref.y is not None else 0,
+                width=w, height=h
+            )
+    except (ValueError, TypeError):
+        pass
+
 def js_save_zoom(zoom_value):
     """JS 可调用：保存页面缩放比例"""
     try:
@@ -418,10 +435,27 @@ def main():
     _window_ref = window
     _config_ref = config
     # 用 expose 单独暴露函数，避免 js_api 对象的递归遍历 bug
-    window.expose(js_close, js_get_window_position, js_move_window, js_save_zoom, js_resize_window)
+    window.expose(js_close, js_get_window_position, js_move_window, js_save_zoom, js_resize_window, js_set_window_size)
 
     # 页面加载完成后注入标题栏和中键拖动平移
     def on_loaded():
+        # 第一步：强制设置窗口大小（放在最开头，确保即使后面JS注入异常也能执行）
+        saved_geom = config.window_geometry
+        if saved_geom.isValid() and saved_geom.width > 0 and saved_geom.height > 0:
+            target_w, target_h = saved_geom.width, saved_geom.height
+        else:
+            _, _, target_w, target_h = calc_default_window()
+        try:
+            window.resize(target_w, target_h)
+            config.window_geometry = WindowGeometry(
+                x=window.x if window.x is not None else 0,
+                y=window.y if window.y is not None else 0,
+                width=target_w, height=target_h
+            )
+        except Exception:
+            pass
+
+        # 第二步：注入CSS和JS
         css_json = json.dumps(TITLEBAR_CSS)
         zoom_json = json.dumps(config.zoom)
         js_code = f"""
@@ -438,28 +472,25 @@ def main():
             }}
             {TITLEBAR_JS}
             {PAN_JS}
+            // 延迟设置窗口大小，防止WebView2自动调整（在主线程执行避免GIL问题）
+            var _targetW = {target_w};
+            var _targetH = {target_h};
+            function _setWinSize() {{
+                try {{
+                    if (window.pywebview && window.pywebview.api && window.pywebview.api.js_set_window_size) {{
+                        window.pywebview.api.js_set_window_size(_targetW, _targetH);
+                    }}
+                }} catch(e) {{}}
+            }}
+            setTimeout(_setWinSize, 1000);  // 1秒后设置
+            setTimeout(_setWinSize, 3000);  // 3秒后再确认一次
         }})();
         """
+        js_code = js_code.replace('{target_w}', str(target_w)).replace('{target_h}', str(target_h))
         window.evaluate_js(js_code)
 
         # 强制设置窗口大小（WebView2初始化后可能自动调整窗口大小）
-        # 仅当配置中的窗口大小无效时，才强制使用默认值
-        saved_geom = config.window_geometry
-        if (not saved_geom.isValid() or saved_geom.width <= 0 or saved_geom.height <= 0):
-            _, _, default_w, default_h = calc_default_window()
-            def _force_resize():
-                try:
-                    window.resize(default_w, default_h)
-                    # 保存到配置，避免下次再次强制resize
-                    config.window_geometry = WindowGeometry(
-                        x=window.x if window.x is not None else 0,
-                        y=window.y if window.y is not None else 0,
-                        width=default_w, height=default_h
-                    )
-                except Exception:
-                    pass
-            # 延迟1秒，确保WebView2完成所有初始化后再设置窗口大小
-            threading.Timer(1.0, _force_resize).start()
+        # 用JS setTimeout延迟调用Python函数，确保在主线程中执行（避免GIL问题）
 
     window.events.loaded += on_loaded
 
