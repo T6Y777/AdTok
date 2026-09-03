@@ -167,45 +167,6 @@ TITLEBAR_JS = """
         }
     }
 
-    // ===== 窗口大小调整（右下角手柄拖拽） =====
-    var isResizing = false;
-    var resizeStartX, resizeStartY;
-    var resizeStartW, resizeStartH;
-    var MIN_W = 360, MIN_H = 240;
-
-    async function startResize(e) {
-        if (e.button !== 0) return;
-        if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.js_get_window_size) return;
-        try {
-            var size = await window.pywebview.api.js_get_window_size();
-            resizeStartW = size[0];
-            resizeStartH = size[1];
-        } catch(err) { return; }
-        isResizing = true;
-        resizeStartX = e.screenX;
-        resizeStartY = e.screenY;
-        try { e.target.setPointerCapture(e.pointerId); } catch(err) {}
-        e.preventDefault();
-        e.stopPropagation();
-    }
-
-    function onResize(e) {
-        if (!isResizing) return;
-        var newW = resizeStartW + (e.screenX - resizeStartX);
-        var newH = resizeStartH + (e.screenY - resizeStartY);
-        newW = Math.max(MIN_W, newW);
-        newH = Math.max(MIN_H, newH);
-        try { window.pywebview.api.js_resize_window(newW, newH); } catch(err) {}
-        e.preventDefault();
-    }
-
-    function endResize(e) {
-        if (e.button === 0 && isResizing) {
-            isResizing = false;
-            try { e.target.releasePointerCapture(e.pointerId); } catch(err) {}
-        }
-    }
-
     function inject() {
         if (document.getElementById('adtok-titlebar')) return;
         if (!document.documentElement) { setTimeout(inject, 100); return; }
@@ -241,11 +202,6 @@ TITLEBAR_JS = """
         bar.appendChild(btnClose);
         document.documentElement.appendChild(bar);
 
-        // 右下角调整大小手柄
-        var handle = document.createElement('div');
-        handle.id = 'adtok-resize-handle';
-        handle.addEventListener('pointerdown', startResize);
-        document.documentElement.appendChild(handle);
     }
 
     // 全局捕获阶段监听，基于坐标判断是否在标题栏区域
@@ -254,10 +210,34 @@ TITLEBAR_JS = """
     window.addEventListener('pointerup', endWindowDrag, true);
     window.addEventListener('pointercancel', endWindowDrag, true);
 
-    // 调整大小事件监听
-    window.addEventListener('pointermove', onResize, true);
-    window.addEventListener('pointerup', endResize, true);
-    window.addEventListener('pointercancel', endResize, true);
+
+
+    // ===== Ctrl+滚轮缩放页面 =====
+    var currentZoom = 1.0;
+    var MIN_ZOOM = 0.5;
+    var MAX_ZOOM = 2.5;
+    var ZOOM_STEP = 0.1;
+
+    function applyZoom(z) {
+        currentZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+        document.documentElement.style.zoom = currentZoom;
+        try {
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.js_save_zoom) {
+                window.pywebview.api.js_save_zoom(currentZoom);
+            }
+        } catch(err) {}
+    }
+
+    window.addEventListener('wheel', function(e) {
+        if (e.ctrlKey) {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                applyZoom(currentZoom + ZOOM_STEP);
+            } else {
+                applyZoom(currentZoom - ZOOM_STEP);
+            }
+        }
+    }, { passive: false });
 
     inject();
 })();
@@ -319,6 +299,7 @@ PAN_JS = """
 # ============ JS 暴露函数（避免 js_api 对象的递归遍历 bug） ============
 
 _window_ref = None
+_config_ref = None
 
 def js_close():
     """JS 可调用：隐藏窗口到托盘（与老板键 Ctrl+M 相同效果）"""
@@ -341,21 +322,12 @@ def js_move_window(x, y):
         except (ValueError, TypeError):
             pass
 
-def js_resize_window(width, height):
-    """JS 可调用：调整窗口大小"""
-    if _window_ref and width is not None and height is not None:
-        try:
-            _window_ref.resize(int(width), int(height))
-        except (ValueError, TypeError):
-            pass
-
-def js_get_window_size():
-    """JS 可调用：获取窗口当前大小 (width, height)，用于拖拽调整大小"""
-    if _window_ref:
-        w = _window_ref.width if _window_ref.width is not None else 480
-        h = _window_ref.height if _window_ref.height is not None else 300
-        return (int(w), int(h))
-    return (480, 300)
+def js_save_zoom(zoom_value):
+    """JS 可调用：保存页面缩放比例"""
+    try:
+        config_ref.zoom = float(zoom_value)
+    except (ValueError, TypeError):
+        pass
 
 
 # ============ 全局状态 ============
@@ -437,19 +409,26 @@ def main():
         background_color='#ffffff',
         on_top=config.always_on_top,
     )
-    global _window_ref
+    global _window_ref, _config_ref
     _window_ref = window
+    _config_ref = config
     # 用 expose 单独暴露函数，避免 js_api 对象的递归遍历 bug
-    window.expose(js_close, js_get_window_position, js_move_window, js_resize_window, js_get_window_size)
+    window.expose(js_close, js_get_window_position, js_move_window, js_save_zoom)
 
     # 页面加载完成后注入标题栏和中键拖动平移
     def on_loaded():
         css_json = json.dumps(TITLEBAR_CSS)
+        zoom_json = json.dumps(config.zoom)
         js_code = f"""
         (function() {{
             var style = document.createElement('style');
             style.textContent = {css_json};
             document.head.appendChild(style);
+            // 恢复保存的缩放比例
+            var savedZoom = {zoom_json};
+            if (savedZoom && savedZoom !== 1.0) {{
+                document.documentElement.style.zoom = savedZoom;
+            }}
             {TITLEBAR_JS}
             {PAN_JS}
         }})();
@@ -473,20 +452,8 @@ def main():
         window.destroy()
         os._exit(0)
 
-    def on_tray_size(w, h):
-        def handler(icon, item):
-            window.resize(w, h)
-        return handler
-
     menu = Menu(
         Item('显示 / 隐藏', on_tray_show_hide),
-        Menu.SEPARATOR,
-        Item('窗口大小', Menu(
-            Item('小  480×300', on_tray_size(480, 300)),
-            Item('中  640×400', on_tray_size(640, 400)),
-            Item('大  800×500', on_tray_size(800, 500)),
-            Item('超大 960×600', on_tray_size(960, 600)),
-        )),
         Menu.SEPARATOR,
         Item('退出', on_tray_quit),
     )

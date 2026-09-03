@@ -11,7 +11,7 @@ ORG_NAME = "AdTok"
 APP_NAME = "AdTokPopup"
 
 # 配置版本：窗口大小逻辑变更时递增，旧版本自动重置窗口几何
-CONFIG_VERSION = 11
+CONFIG_VERSION = 12
 
 # 窗口比例保持 16:10
 WINDOW_ASPECT_RATIO = 1280 / 800  # = 1.6
@@ -117,4 +117,14 @@ class AppConfig:
     @current_url.setter
     def current_url(self, url: str):
         self._data["current_url"] = url
+        self._save()
+
+    # ---- 页面缩放比例 ----
+    @property
+    def zoom(self) -> float:
+        return self._data.get("zoom", 1.0)
+
+    @zoom.setter
+    def zoom(self, value: float):
+        self._data["zoom"] = round(value, 2)
         self._save()
