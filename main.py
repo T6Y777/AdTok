@@ -1,81 +1,276 @@
 """
-AdTok 入口文件
-运行方式：python main.py
+AdTok 入口文件（方案A：pywebview + WebView2）
+- 无边框窗口，注入广告弹窗风格标题栏
+- WebView2 内核，完整支持 H.264 视频解码
+- 全局热键 Ctrl+M 显示/隐藏
+- 系统托盘
 """
+import json
+import os
 import sys
+import threading
+import ctypes
+from ctypes import wintypes
+import math
 
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QStyle
-from PySide6.QtGui import QAction
-from PySide6.QtCore import Qt
+import webview
+import pystray
+from pystray import MenuItem as Item, Menu
+from PIL import Image, ImageDraw
 
-from config import AppConfig, HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK, HOTKEY_DESC
-from popup_window import PopupWindow
+from config import (
+    AppConfig, DEFAULT_URL, DEFAULT_MARGIN,
+    WINDOW_ASPECT_RATIO, WINDOW_AREA_RATIO,
+    HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK, HOTKEY_DESC,
+    WindowGeometry,
+)
 from hotkey import HotkeyManager
 
 
-def create_tray(app: QApplication, window: PopupWindow) -> QSystemTrayIcon:
-    """创建系统托盘图标和菜单"""
-    icon = app.style().standardIcon(QStyle.SP_ComputerIcon)
-    tray = QSystemTrayIcon(icon, app)
-    tray.setToolTip(f"AdTok  老板键: {HOTKEY_DESC}")
+# ============ 屏幕工具 ============
 
-    menu = QMenu()
+def get_screen_workarea():
+    """获取屏幕工作区（去掉任务栏）：返回 (x, y, width, height)"""
+    user32 = ctypes.windll.user32
+    rc = wintypes.RECT()
+    # SPI_GETWORKAREA = 0x0030
+    user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rc), 0)
+    return rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top
 
-    show_action = QAction("显示 / 隐藏", app)
-    show_action.triggered.connect(window.toggle_visibility)
-    menu.addAction(show_action)
 
-    menu.addSeparator()
+def calc_default_window():
+    """计算默认窗口大小和右下角位置（含最小尺寸兜底）"""
+    screen_x, screen_y, screen_w, screen_h = get_screen_workarea()
+    target_area = screen_w * screen_h * WINDOW_AREA_RATIO
+    height = int(math.sqrt(target_area / WINDOW_ASPECT_RATIO))
+    width = int(height * WINDOW_ASPECT_RATIO)
 
-    quit_action = QAction("退出", app)
-    quit_action.triggered.connect(app.quit)
-    menu.addAction(quit_action)
+    # 最小尺寸兜底，保持比例
+    MIN_W, MIN_H = 480, 300
+    if width < MIN_W:
+        width = MIN_W
+        height = int(width / WINDOW_ASPECT_RATIO)
+    if height < MIN_H:
+        height = MIN_H
+        width = int(height * WINDOW_ASPECT_RATIO)
 
-    tray.setContextMenu(menu)
-    # 左键单击托盘图标也切换显示
-    tray.activated.connect(
-        lambda reason: window.toggle_visibility()
-        if reason == QSystemTrayIcon.Trigger
-        else None
-    )
-    tray.show()
-    return tray
+    x = screen_x + screen_w - width - DEFAULT_MARGIN
+    y = screen_y + screen_h - height - DEFAULT_MARGIN
+    return x, y, width, height
 
+
+# ============ 注入的标题栏 ============
+
+TITLEBAR_CSS = """
+#adtok-titlebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #e0e0e0;
+    z-index: 999999;
+    display: flex;
+    align-items: center;
+    padding: 0 4px 0 12px;
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    -webkit-app-region: drag;
+    app-region: drag;
+}
+#adtok-titlebar .adtok-title {
+    color: #999;
+    font-size: 12px;
+    flex: 1;
+    user-select: none;
+}
+#adtok-titlebar button {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    border: none;
+    background: transparent;
+    color: #999;
+    font-size: 13px;
+    width: 32px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#adtok-titlebar button:hover {
+    background: #e0e0e0;
+    color: #333;
+}
+#adtok-titlebar button.adtok-close:hover {
+    background: #e81123;
+    color: white;
+}
+body {
+    padding-top: 32px !important;
+}
+"""
+
+TITLEBAR_JS = """
+(function() {
+    if (document.getElementById('adtok-titlebar')) return;
+    var bar = document.createElement('div');
+    bar.id = 'adtok-titlebar';
+    bar.innerHTML =
+        '<span class="adtok-title">热门推荐</span>' +
+        '<button onclick="window.pywebview.api.minimize()" title="最小化">&#8212;</button>' +
+        '<button class="adtok-close" onclick="window.pywebview.api.close()" title="关闭">&#10005;</button>';
+    document.body.appendChild(bar);
+})();
+"""
+
+
+# ============ JS API（供网页调用） ============
+
+class JsApi:
+    """暴露给网页的 Python API"""
+
+    def __init__(self):
+        self.window = None
+
+    def minimize(self):
+        if self.window:
+            self.window.minimize()
+
+    def close(self):
+        if self.window:
+            self.window.hide()
+
+
+# ============ 全局状态 ============
+
+_window_visible = True
+_tray_icon = None
+
+
+def toggle_window(window):
+    """切换窗口显示/隐藏（热键和托盘共用）"""
+    global _window_visible
+    if _window_visible:
+        window.hide()
+        _window_visible = False
+    else:
+        window.show()
+        _window_visible = True
+
+
+# ============ 托盘图标 ============
+
+def create_tray_image():
+    """创建托盘图标（简单的 A 字母图标）"""
+    image = Image.new('RGB', (64, 64), color='#f5f5f5')
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([14, 14, 50, 50], fill='#666666')
+    draw.rectangle([18, 18, 46, 46], fill='#f5f5f5')
+    draw.text((24, 22), "A", fill='#666666')
+    return image
+
+
+def save_config_on_exit(config, window):
+    """退出时保存窗口位置和当前网址"""
+    try:
+        geom = WindowGeometry(
+            x=window.x, y=window.y,
+            width=window.width, height=window.height,
+        )
+        config.window_geometry = geom
+    except Exception:
+        pass
+    try:
+        url = window.get_current_url()
+        if url:
+            config.current_url = url
+    except Exception:
+        pass
+
+
+# ============ 主函数 ============
 
 def main():
-    # 高 DPI 支持
-    QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-    )
-
-    app = QApplication(sys.argv)
-    app.setApplicationName("AdTok")
-    app.setQuitOnLastWindowClosed(False)  # 关窗口不退出，保留托盘
-
     config = AppConfig()
-    window = PopupWindow(config)
-    window.show()
+
+    # 确定窗口位置和大小
+    saved = config.window_geometry
+    if (
+        saved.isValid()
+        and saved.x >= 0
+        and saved.y >= 0
+        and saved.width >= 480
+        and saved.height >= 300
+    ):
+        x, y, width, height = saved.x, saved.y, saved.width, saved.height
+    else:
+        x, y, width, height = calc_default_window()
+
+    # 创建 JS API
+    js_api = JsApi()
+
+    # 创建无边框窗口
+    window = webview.create_window(
+        title='热门推荐',
+        url=config.current_url,
+        width=width,
+        height=height,
+        x=x,
+        y=y,
+        frameless=True,
+        easy_drag=False,
+        background_color='#ffffff',
+        js_api=js_api,
+        on_top=config.always_on_top,
+    )
+    js_api.window = window
+
+    # 页面加载完成后注入标题栏
+    def on_loaded():
+        css_json = json.dumps(TITLEBAR_CSS)
+        js_code = f"""
+        (function() {{
+            var style = document.createElement('style');
+            style.textContent = {css_json};
+            document.head.appendChild(style);
+            {TITLEBAR_JS}
+        }})();
+        """
+        window.evaluate_js(js_code)
+
+    window.events.loaded += on_loaded
+
+    # 全局热键
+    hotkey = HotkeyManager()
+    hotkey.register(HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK, lambda: toggle_window(window))
 
     # 系统托盘
-    tray = create_tray(app, window)
+    def on_tray_show_hide(icon, item):
+        toggle_window(window)
 
-    # 全局热键（老板键）
-    hotkey = HotkeyManager()
-    hotkey_ok = hotkey.register(HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK, window.toggle_visibility)
-    if not hotkey_ok:
-        # 热键注册失败（可能被其他程序占用），用托盘气泡提示
-        tray.showMessage("AdTok", f"热键 {HOTKEY_DESC} 注册失败，可能被其他程序占用", QSystemTrayIcon.Warning, 3000)
-
-    # 退出时保存状态 + 清理热键
-    def on_quit():
-        config.window_geometry = window.geometry()
-        config.current_url = window.web_view.url().toString()
+    def on_tray_quit(icon, item):
+        save_config_on_exit(config, window)
         hotkey.cleanup()
+        icon.stop()
+        window.destroy()
+        os._exit(0)
 
-    app.aboutToQuit.connect(on_quit)
+    menu = Menu(
+        Item('显示 / 隐藏', on_tray_show_hide),
+        Item('退出', on_tray_quit),
+    )
+    global _tray_icon
+    _tray_icon = pystray.Icon(
+        'AdTok', create_tray_image(),
+        f'AdTok  老板键: {HOTKEY_DESC}', menu
+    )
+    threading.Thread(target=_tray_icon.run, daemon=True).start()
 
-    sys.exit(app.exec())
+    # 启动（阻塞主线程）
+    webview.start()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

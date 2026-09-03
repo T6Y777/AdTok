@@ -1,45 +1,69 @@
 """
-基础单元测试
-覆盖：配置管理、热键管理器、窗口创建冒烟测试
+基础单元测试（方案A：pywebview 版本，无 Qt 依赖）
+覆盖：配置管理、窗口几何、热键管理器、屏幕计算
 """
 import os
 import sys
+import json
+import tempfile
 
 import pytest
 
-# 把项目根目录加入 path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QRect
-
 from config import (
-    AppConfig, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_URL,
-    HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK, WINDOW_ASPECT_RATIO,
+    AppConfig, WindowGeometry, DEFAULT_URL, DEFAULT_ALWAYS_ON_TOP,
+    WINDOW_ASPECT_RATIO, CONFIG_VERSION,
 )
+from hotkey import HotkeyManager
+from main import calc_default_window, get_screen_workarea
 
 
-@pytest.fixture(scope="session")
-def qapp():
-    """测试用 QApplication 单例"""
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-    yield app
+# ============ WindowGeometry 测试 ============
+
+class TestWindowGeometry:
+
+    def test_default_is_invalid(self):
+        geom = WindowGeometry()
+        assert not geom.isValid()
+
+    def test_valid_geometry(self):
+        geom = WindowGeometry(100, 200, 800, 600)
+        assert geom.isValid()
+        assert geom.x == 100
+        assert geom.y == 200
+        assert geom.width == 800
+        assert geom.height == 600
+
+    def test_to_dict_and_back(self):
+        geom = WindowGeometry(10, 20, 300, 400)
+        d = geom.to_dict()
+        geom2 = WindowGeometry.from_dict(d)
+        assert geom2.x == 10
+        assert geom2.y == 20
+        assert geom2.width == 300
+        assert geom2.height == 400
+
+    def test_from_dict_missing_keys(self):
+        geom = WindowGeometry.from_dict({})
+        assert geom.x == 0
+        assert geom.y == 0
+        assert geom.width == 0
+        assert geom.height == 0
+        assert not geom.isValid()
 
 
 # ============ 配置管理测试 ============
 
 class TestAppConfig:
 
-    def test_default_url_is_douyin(self):
+    def test_default_url(self):
         config = AppConfig()
         assert "douyin.com" in config.current_url
 
     def test_default_geometry_is_invalid(self):
-        """没有保存配置时返回无效矩形（触发动态计算默认大小）"""
         config = AppConfig()
-        config.settings.remove("window_geometry")
+        config._data.pop("window_geometry", None)
         geom = config.window_geometry
         assert not geom.isValid()
 
@@ -53,90 +77,81 @@ class TestAppConfig:
         test_url = "https://www.bilibili.com"
         config.current_url = test_url
         assert config.current_url == test_url
-        # 还原
         config.current_url = original
 
     def test_set_and_get_geometry(self):
         config = AppConfig()
-        original = config.window_geometry
-        test_rect = QRect(100, 200, 400, 700)
-        config.window_geometry = test_rect
+        test_geom = WindowGeometry(100, 200, 600, 400)
+        config.window_geometry = test_geom
         saved = config.window_geometry
-        assert saved.x() == 100
-        assert saved.y() == 200
-        assert saved.width() == 400
-        assert saved.height() == 700
-        # 还原
-        config.window_geometry = original
+        assert saved.x == 100
+        assert saved.y == 200
+        assert saved.width == 600
+        assert saved.height == 400
+
+    def test_config_version_is_latest(self):
+        config = AppConfig()
+        assert config._data.get("config_version") == CONFIG_VERSION
+
+    def test_config_persists_to_file(self):
+        config = AppConfig()
+        assert os.path.exists(config.config_file)
+        with open(config.config_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert "config_version" in data
 
 
 # ============ 热键管理测试 ============
 
 class TestHotkeyManager:
 
-    def test_create_and_cleanup(self, qapp):
-        from hotkey import HotkeyManager
+    def test_create_and_cleanup(self):
         manager = HotkeyManager()
         assert manager is not None
         assert manager.callback is None
         manager.cleanup()
 
-    def test_register_unregister(self, qapp):
-        from hotkey import HotkeyManager
+    def test_register_and_unregister(self):
         manager = HotkeyManager()
         called = []
 
         def on_hotkey():
             called.append(True)
 
-        success = manager.register(HOTKEY_ID, HOTKEY_MOD, HOTKEY_VK, on_hotkey)
-        # 热键可能被占用，但创建/注销流程不应崩溃
-        if success:
-            assert manager.callback is not None
+        manager.register(1, 0x0002, 0x4D, on_hotkey)
+        assert manager.callback is not None
+        assert manager._hotkey_id == 1
+        # 等待消息循环线程启动
+        import time
+        time.sleep(0.2)
+        assert manager._hwnd is not None
+
         manager.unregister()
         assert manager.callback is None
+        assert manager._hotkey_id is None
         manager.cleanup()
 
 
-# ============ 窗口冒烟测试 ============
+# ============ 屏幕计算测试 ============
 
-class TestPopupWindow:
+class TestScreenCalc:
 
-    def test_window_creates_without_error(self, qapp):
-        """窗口能正常创建并设置基本属性"""
-        from popup_window import PopupWindow
-        config = AppConfig()
-        window = PopupWindow(config)
+    def test_get_workarea_returns_positive(self):
+        x, y, w, h = get_screen_workarea()
+        assert w > 0
+        assert h > 0
+        assert x >= 0
+        assert y >= 0
 
-        # 基本属性验证
-        assert window.minimumWidth() == 480
-        assert window.minimumHeight() == 300
-        # 默认大小由屏幕动态计算，保持 16:10 比例（误差 <= 1px）
-        ratio = window.width() / window.height()
-        assert abs(ratio - WINDOW_ASPECT_RATIO) < 0.02
-
-        # 标题栏存在
-        assert window.title_bar is not None
-        assert window.title_bar.title_label.text() == "热门推荐"
-
-        # WebView 存在且已加载 URL
-        assert window.web_view is not None
-        assert "douyin.com" in window.web_view.url().toString()
-
-        window.close()
-
-    def test_toggle_visibility(self, qapp):
-        """切换显示/隐藏功能正常"""
-        from popup_window import PopupWindow
-        config = AppConfig()
-        window = PopupWindow(config)
-        window.show()
-        assert window.isVisible() is True
-
-        window.toggle_visibility()
-        assert window.isVisible() is False
-
-        window.toggle_visibility()
-        assert window.isVisible() is True
-
-        window.close()
+    def test_calc_default_window_returns_reasonable_size(self):
+        x, y, w, h = calc_default_window()
+        assert w >= 480
+        assert h >= 300
+        # 比例接近 16:10
+        ratio = w / h
+        assert abs(ratio - WINDOW_ASPECT_RATIO) < 0.05
+        # 位置在屏幕范围内
+        screen_x, screen_y, screen_w, screen_h = get_screen_workarea()
+        assert x >= screen_x
+        assert y >= screen_y
+        assert x + w <= screen_x + screen_w + 20  # 允许少量边缘溢出
