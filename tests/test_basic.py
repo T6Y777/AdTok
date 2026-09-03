@@ -16,7 +16,7 @@ from config import (
     WINDOW_ASPECT_RATIO, CONFIG_VERSION,
 )
 from hotkey import HotkeyManager
-from main import calc_default_window, get_screen_workarea
+from AdTok import calc_default_window, get_screen_workarea
 
 
 # ============ WindowGeometry 测试 ============
