@@ -46,7 +46,7 @@ def calc_default_window():
     width = int(height * WINDOW_ASPECT_RATIO)
 
     # 最小尺寸兜底，保持比例
-    MIN_W, MIN_H = 480, 300
+    MIN_W, MIN_H = 640, 400
     if width < MIN_W:
         width = MIN_W
         height = int(width / WINDOW_ASPECT_RATIO)
@@ -291,6 +291,14 @@ def js_move_window(x, y):
         except (ValueError, TypeError):
             pass
 
+def js_resize_window(width, height):
+    """JS 可调用：调整窗口大小"""
+    if _window_ref and width is not None and height is not None:
+        try:
+            _window_ref.resize(int(width), int(height))
+        except (ValueError, TypeError):
+            pass
+
 
 # ============ 全局状态 ============
 
@@ -367,13 +375,14 @@ def main():
         y=y,
         frameless=True,
         easy_drag=False,
+        resizable=True,
         background_color='#ffffff',
         on_top=config.always_on_top,
     )
     global _window_ref
     _window_ref = window
     # 用 expose 单独暴露函数，避免 js_api 对象的递归遍历 bug
-    window.expose(js_close, js_get_window_position, js_move_window)
+    window.expose(js_close, js_get_window_position, js_move_window, js_resize_window)
 
     # 页面加载完成后注入标题栏和中键拖动平移
     def on_loaded():
@@ -406,8 +415,21 @@ def main():
         window.destroy()
         os._exit(0)
 
+    def on_tray_size(w, h):
+        def handler(icon, item):
+            window.resize(w, h)
+        return handler
+
     menu = Menu(
         Item('显示 / 隐藏', on_tray_show_hide),
+        Menu.SEPARATOR,
+        Item('窗口大小', Menu(
+            Item('小  480×300', on_tray_size(480, 300)),
+            Item('中  640×400', on_tray_size(640, 400)),
+            Item('大  800×500', on_tray_size(800, 500)),
+            Item('超大 960×600', on_tray_size(960, 600)),
+        )),
+        Menu.SEPARATOR,
         Item('退出', on_tray_quit),
     )
     global _tray_icon
