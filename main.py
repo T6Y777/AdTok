@@ -63,20 +63,20 @@ def calc_default_window():
 
 TITLEBAR_CSS = """
 #adtok-titlebar {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     right: 0;
     height: 32px;
     background: #f5f5f5;
     border-bottom: 1px solid #e0e0e0;
-    border-radius: 10px 10px 0 0;
     z-index: 999999;
     display: flex;
     align-items: center;
     padding: 0 4px 0 12px;
     font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-    user-select: none;
+    -webkit-app-region: drag;
+    app-region: drag;
 }
 #adtok-titlebar .adtok-title {
     color: #999;
@@ -85,6 +85,8 @@ TITLEBAR_CSS = """
     user-select: none;
 }
 #adtok-titlebar button {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
     border: none;
     background: transparent;
     color: #999;
@@ -107,24 +109,6 @@ TITLEBAR_CSS = """
 }
 body {
     padding-top: 32px !important;
-    position: relative !important;
-}
-"""
-
-# 广告弹窗外框：红色渐变背景 + 内边距，视频内容居中显示在圆角外框内
-FRAME_CSS = """
-html {
-    background: linear-gradient(135deg, #e84118 0%, #f16b3a 35%, #ff7f50 70%, #ffa502 100%) !important;
-    padding: 14px !important;
-    box-sizing: border-box !important;
-    min-height: 100vh !important;
-    overflow: hidden !important;
-}
-body {
-    border-radius: 10px !important;
-    overflow: hidden !important;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2) !important;
-    background: #fff !important;
 }
 """
 
@@ -136,48 +120,6 @@ TITLEBAR_JS = """
         } else {
             setTimeout(hideWindow, 100);
         }
-    }
-
-    // ===== 窗口拖动功能 =====
-    var isWinDragging = false;
-    var dragStartMouseX, dragStartMouseY;
-    var dragStartWinX, dragStartWinY;
-    var lastMoveTime = 0;
-
-    function startWindowDrag(e) {
-        if (e.button !== 0) return; // 只响应左键
-        if (e.target.closest('button')) return; // 按钮区域不拖动
-        if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.js_get_window_position) return;
-
-        try {
-            var pos = window.pywebview.api.js_get_window_position();
-            dragStartWinX = pos[0];
-            dragStartWinY = pos[1];
-        } catch(err) { return; }
-
-        isWinDragging = true;
-        dragStartMouseX = e.screenX;
-        dragStartMouseY = e.screenY;
-        e.preventDefault();
-        e.stopPropagation();
-    }
-
-    function onWindowDrag(e) {
-        if (!isWinDragging) return;
-        var now = Date.now();
-        if (now - lastMoveTime < 16) return; // 节流，约60fps
-        lastMoveTime = now;
-
-        var newX = dragStartWinX + (e.screenX - dragStartMouseX);
-        var newY = dragStartWinY + (e.screenY - dragStartMouseY);
-        if (isNaN(newX) || isNaN(newY)) return;
-        try {
-            window.pywebview.api.js_move_window(newX, newY);
-        } catch(err) {}
-    }
-
-    function endWindowDrag(e) {
-        if (e.button === 0) isWinDragging = false;
     }
 
     function inject() {
@@ -214,22 +156,8 @@ TITLEBAR_JS = """
         bar.appendChild(btnMin);
         bar.appendChild(btnClose);
         document.body.appendChild(bar);
-
-        // 标题栏可拖动窗口
-        bar.addEventListener('mousedown', startWindowDrag);
     }
     inject();
-
-    // 外框区域（html padding 区域）可拖动窗口
-    document.documentElement.addEventListener('mousedown', function(e) {
-        if (e.target === document.documentElement) {
-            startWindowDrag(e);
-        }
-    });
-
-    document.addEventListener('mousemove', onWindowDrag);
-    document.addEventListener('mouseup', endWindowDrag);
-    document.addEventListener('mouseleave', endWindowDrag);
 })();
 """
 
@@ -293,22 +221,6 @@ def js_close():
     """JS 可调用：隐藏窗口到托盘（与老板键 Ctrl+M 相同效果）"""
     if _window_ref:
         _window_ref.hide()
-
-def js_get_window_position():
-    """JS 可调用：获取窗口当前位置 (x, y)，用于拖动"""
-    if _window_ref:
-        x = _window_ref.x if _window_ref.x is not None else 0
-        y = _window_ref.y if _window_ref.y is not None else 0
-        return (int(x), int(y))
-    return (0, 0)
-
-def js_move_window(x, y):
-    """JS 可调用：移动窗口到指定位置，用于拖动"""
-    if _window_ref and x is not None and y is not None:
-        try:
-            _window_ref.move(int(x), int(y))
-        except (ValueError, TypeError):
-            pass
 
 
 # ============ 全局状态 ============
@@ -392,12 +304,11 @@ def main():
     global _window_ref
     _window_ref = window
     # 用 expose 单独暴露函数，避免 js_api 对象的递归遍历 bug
-    window.expose(js_close, js_get_window_position, js_move_window)
+    window.expose(js_close)
 
     # 页面加载完成后注入标题栏和中键拖动平移
     def on_loaded():
-        all_css = TITLEBAR_CSS + FRAME_CSS
-        css_json = json.dumps(all_css)
+        css_json = json.dumps(TITLEBAR_CSS)
         js_code = f"""
         (function() {{
             var style = document.createElement('style');

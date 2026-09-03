@@ -11,14 +11,13 @@ ORG_NAME = "AdTok"
 APP_NAME = "AdTokPopup"
 
 # 配置版本：窗口大小逻辑变更时递增，旧版本自动重置窗口几何
-CONFIG_VERSION = 9
+CONFIG_VERSION = 8
 
 # 窗口比例保持 16:10
 WINDOW_ASPECT_RATIO = 1280 / 800  # = 1.6
 # 窗口面积占屏幕可用面积的比例
 WINDOW_AREA_RATIO = 1 / 9
 DEFAULT_MARGIN = 0  # 窗口默认与屏幕边缘的间距，0 = 完全贴边
-FRAME_PADDING = 14  # 广告弹窗外框的内边距（像素），视频内容居中显示
 DEFAULT_URL = "https://www.douyin.com"
 DEFAULT_ALWAYS_ON_TOP = True
 
