@@ -39,6 +39,7 @@ class TestAppConfig:
     def test_default_geometry_is_invalid(self):
         """没有保存配置时返回无效矩形（触发动态计算默认大小）"""
         config = AppConfig()
+        config.settings.remove("window_geometry")
         geom = config.window_geometry
         assert not geom.isValid()
 

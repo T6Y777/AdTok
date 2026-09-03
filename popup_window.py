@@ -13,7 +13,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage
+from PySide6.QtWebEngineCore import (
+    QWebEngineProfile, QWebEnginePage, QWebEngineSettings, QWebEngineScript,
+)
 
 from config import (
     AppConfig, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_MARGIN,
@@ -158,17 +160,44 @@ class PopupWindow(QWidget):
     def _init_web(self):
         """初始化 WebEngine，使用持久化 profile 保存登录状态"""
         self.profile = QWebEngineProfile("AdTokProfile", self)
+
+        # 更真实的 User-Agent 和语言
         self.profile.setHttpUserAgent(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
+            "Chrome/125.0.0.0 Safari/537.36"
         )
+        self.profile.setHttpAcceptLanguage("zh-CN,zh;q=0.9,en;q=0.8")
 
+        # 反自动化检测：隐藏 navigator.webdriver 等特征
+        anti_detect = QWebEngineScript()
+        anti_detect.setName("anti_detect")
+        anti_detect.setInjectionPoint(QWebEngineScript.DocumentCreation)
+        anti_detect.setWorldId(QWebEngineScript.MainWorld)
+        anti_detect.setSourceCode("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+            Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en']});
+            window.chrome = {runtime: {}};
+        """)
+        self.profile.scripts().insert(anti_detect)
+
+        # 创建页面和视图
         self.web_view = QWebEngineView()
         self.page = QWebEnginePage(self.profile, self.web_view)
         self.web_view.setPage(self.page)
-        self.web_view.setUrl(self.config.current_url)
 
+        # 页面设置：允许自动播放、启用 JS 等
+        s = self.page.settings()
+        s.setAttribute(QWebEngineSettings.JavascriptEnabled, True)
+        s.setAttribute(QWebEngineSettings.JavascriptCanOpenWindows, True)
+        s.setAttribute(QWebEngineSettings.PluginsEnabled, True)
+        s.setAttribute(QWebEngineSettings.PlaybackRequiresUserGesture, False)
+        s.setAttribute(QWebEngineSettings.AllowWindowActivationFromJavaScript, True)
+        s.setAttribute(QWebEngineSettings.FullScreenSupportEnabled, True)
+        s.setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, True)
+
+        self.web_view.setUrl(self.config.current_url)
         self.web_container.layout().addWidget(self.web_view)
 
     def _position_window(self):
